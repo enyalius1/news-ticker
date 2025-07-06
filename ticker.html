@@ -3,7 +3,7 @@
 <head>
   <meta name="robots" content="noindex, nofollow" />
   <meta charset="UTF-8" />
-  <meta http-equiv="refresh" content="3600" />
+  <meta http-equiv="refresh" content="1800" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" href="data:,">
   <title>BBC News Ticker</title>
@@ -59,9 +59,9 @@
       const response = await fetch(proxyUrl);
       if (!response.ok) throw new Error("Network response not OK");
 
-      const text = await response.text();
+      const { contents } = await response.json();
       const parser = new DOMParser();
-      const xml = parser.parseFromString(text, "application/xml");
+      const xml = parser.parseFromString(contents, "application/xml");
 
       const items = xml.getElementsByTagName("item");
       console.log("Number of <item> entries found:", items.length);
