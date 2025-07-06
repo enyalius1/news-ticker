@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="refresh" content="3600" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Al Jazeera News Ticker</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: black;
+      color: white;
+      font-family: Arial, sans-serif;
+      font-size: 20px;
+    }
+
+    #ticker-container {
+      width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      box-sizing: border-box;
+      padding: 10px;
+    }
+
+    #ticker {
+      display: inline-block;
+      padding-left: 100%;
+      animation: scroll-left 30s linear infinite;
+    }
+
+    @keyframes scroll-left {
+      from {
+        transform: translateX(0%);
+      }
+      to {
+        transform: translateX(-100%);
+      }
+    }
+
+    .headline {
+      margin-right: 50px;
+    }
+  </style>
+</head>
+<body>
+  <div id="ticker-container">
+    <div id="ticker">Loading headlines...</div>
+  </div>
+
+  <script>
+    async function loadHeadlines() {
+      try {
+        const proxy = "https://api.allorigins.win/get?url=";
+        const rssUrl = encodeURIComponent("https://www.aljazeera.com/xml/rss/all.xml");
+        const response = await fetch(`${proxy}${rssUrl}`);
+        const data = await response.json();
+
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(data.contents, "text/xml");
+        const items = xml.querySelectorAll("item");
+
+        let headlines = "";
+        items.forEach((item, index) => {
+          if (index < 10) {
+            const title = item.querySelector("title").textContent;
+            headlines += `<span class="headline">📰 ${title}</span>`;
+          }
+        });
+
+        document.getElementById("ticker").innerHTML = headlines;
+      } catch (e) {
+        document.getElementById("ticker").textContent = "Failed to load headlines.";
+        console.error("Error loading RSS feed:", e);
+      }
+    }
+
+    loadHeadlines();
+    setInterval(loadHeadlines, 5 * 60 * 1000); // refresh every 5 minutes
+  </script>
+</body>
+</html>
