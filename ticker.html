@@ -52,16 +52,16 @@
 
 <script>
   async function loadHeadlines() {
-    try {
-      const proxy = "https://api.allorigins.win/get?url=";
-      const rssUrl = encodeURIComponent("https://www.aljazeera.com/xml/rss/all.xml");
-      const response = await fetch(`${proxy}${rssUrl}`);
+    const rssFeed = "https://www.aljazeera.com/xml/rss/all.xml";
+    const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(rssFeed);
 
+    try {
+      const response = await fetch(proxyUrl);
       if (!response.ok) throw new Error("Network response not OK");
 
-      const data = await response.json();
+      const text = await response.text();
       const parser = new DOMParser();
-      const xml = parser.parseFromString(data.contents, "text/xml");
+      const xml = parser.parseFromString(text, "text/xml");
       const items = xml.querySelectorAll("item");
 
       let headlines = "";
@@ -75,12 +75,12 @@
       document.getElementById("ticker").innerHTML = headlines || "No headlines found.";
     } catch (e) {
       console.error("❌ Failed to load headlines:", e);
-      document.getElementById("ticker").textContent = "⚠️ Failed to load headlines. Check console for details.";
+      document.getElementById("ticker").textContent = "⚠️ Failed to load headlines.";
     }
   }
 
   loadHeadlines();
-  setInterval(loadHeadlines, 5 * 60 * 1000); // every 5 min
+  setInterval(loadHeadlines, 5 * 60 * 1000);
 </script>
 </body>
 </html>
