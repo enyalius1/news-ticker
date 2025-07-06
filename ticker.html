@@ -49,6 +49,18 @@
   <div id="ticker-container">
     <div id="ticker">Loading headlines...</div>
   </div>
+<rss-ticker
+  autostart="2"
+  url="https://rss.cnn.com/rss/edition.rss"
+  proxy-url="https://corsproxy.io/%%_URL_%%"
+  speed="2"
+  color-new="#a44"
+  color-old="#bbb"
+  hrs-old="6"
+  transparency="0.3"
+  infobox-link-bgcolor="#1a1a1a"
+  font-size="1.3">
+</rss-ticker>
 
 <script>
   async function loadHeadlines() {
