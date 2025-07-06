@@ -61,18 +61,21 @@
 
       const text = await response.text();
       const parser = new DOMParser();
-      const xml = parser.parseFromString(text, "text/xml");
-      const items = xml.querySelectorAll("item");
+      const xml = parser.parseFromString(text, "application/xml");
+
+      const items = xml.getElementsByTagName("item");
+      console.log("🧪 Number of <item> entries found:", items.length);
 
       let headlines = "";
-      items.forEach((item, index) => {
-        if (index < 10) {
-          const title = item.querySelector("title").textContent;
+      for (let i = 0; i < Math.min(items.length, 10); i++) {
+        const titleNode = items[i].getElementsByTagName("title")[0];
+        if (titleNode && titleNode.textContent) {
+          const title = titleNode.textContent;
           headlines += `<span class="headline">📰 ${title}</span>`;
         }
-      });
+      }
 
-      document.getElementById("ticker").innerHTML = headlines || "No headlines found.";
+      document.getElementById("ticker").innerHTML = headlines || "⚠️ Still no headlines found.";
     } catch (e) {
       console.error("❌ Failed to load headlines:", e);
       document.getElementById("ticker").textContent = "⚠️ Failed to load headlines.";
