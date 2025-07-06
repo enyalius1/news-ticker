@@ -50,35 +50,37 @@
     <div id="ticker">Loading headlines...</div>
   </div>
 
-  <script>
-    async function loadHeadlines() {
-      try {
-        const proxy = "https://api.allorigins.win/get?url=";
-        const rssUrl = encodeURIComponent("https://www.aljazeera.com/xml/rss/all.xml");
-        const response = await fetch(`${proxy}${rssUrl}`);
-        const data = await response.json();
+<script>
+  async function loadHeadlines() {
+    try {
+      const proxy = "https://api.allorigins.win/get?url=";
+      const rssUrl = encodeURIComponent("https://www.aljazeera.com/xml/rss/all.xml");
+      const response = await fetch(`${proxy}${rssUrl}`);
 
-        const parser = new DOMParser();
-        const xml = parser.parseFromString(data.contents, "text/xml");
-        const items = xml.querySelectorAll("item");
+      if (!response.ok) throw new Error("Network response not OK");
 
-        let headlines = "";
-        items.forEach((item, index) => {
-          if (index < 10) {
-            const title = item.querySelector("title").textContent;
-            headlines += `<span class="headline">📰 ${title}</span>`;
-          }
-        });
+      const data = await response.json();
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(data.contents, "text/xml");
+      const items = xml.querySelectorAll("item");
 
-        document.getElementById("ticker").innerHTML = headlines;
-      } catch (e) {
-        document.getElementById("ticker").textContent = "Failed to load headlines.";
-        console.error("Error loading RSS feed:", e);
-      }
+      let headlines = "";
+      items.forEach((item, index) => {
+        if (index < 10) {
+          const title = item.querySelector("title").textContent;
+          headlines += `<span class="headline">📰 ${title}</span>`;
+        }
+      });
+
+      document.getElementById("ticker").innerHTML = headlines || "No headlines found.";
+    } catch (e) {
+      console.error("❌ Failed to load headlines:", e);
+      document.getElementById("ticker").textContent = "⚠️ Failed to load headlines. Check console for details.";
     }
+  }
 
-    loadHeadlines();
-    setInterval(loadHeadlines, 5 * 60 * 1000); // refresh every 5 minutes
-  </script>
+  loadHeadlines();
+  setInterval(loadHeadlines, 5 * 60 * 1000); // every 5 min
+</script>
 </body>
 </html>
