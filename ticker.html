@@ -67,7 +67,7 @@
       console.log("🧪 Number of <item> entries found:", items.length);
 
       let headlines = "";
-      for (let i = 0; i < Math.min(items.length, 10); i++) {
+      for (let i = 0; i < Math.min(items.length, 30); i++) {
         const titleNode = items[i].getElementsByTagName("title")[0];
         if (titleNode && titleNode.textContent) {
           const title = titleNode.textContent;
@@ -75,10 +75,10 @@
         }
       }
 
-      document.getElementById("ticker").innerHTML = headlines || "⚠️ Still no headlines found.";
+      document.getElementById("ticker").innerHTML = headlines || "Still no headlines found.";
     } catch (e) {
-      console.error("❌ Failed to load headlines:", e);
-      document.getElementById("ticker").textContent = "⚠️ Failed to load headlines.";
+      console.error("Failed to load headlines:", e);
+      document.getElementById("ticker").textContent = "Failed to load headlines.";
     }
   }
 
