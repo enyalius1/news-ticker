@@ -6,7 +6,7 @@
   <meta http-equiv="refresh" content="3600" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" href="data:,">
-  <title>Al Jazeera News Ticker</title>
+  <title>CNN News Ticker</title>
   <style>
     body {
       margin: 0;
@@ -52,7 +52,7 @@
 
 <script>
   async function loadHeadlines() {
-    const rssFeed = "https://www.aljazeera.com/xml/rss/all.xml";
+    const rssFeed = "https://rss.cnn.com/rss/edition.rss";
     const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(rssFeed);
 
     try {
@@ -64,14 +64,14 @@
       const xml = parser.parseFromString(text, "application/xml");
 
       const items = xml.getElementsByTagName("item");
-      console.log("🧪 Number of <item> entries found:", items.length);
+      console.log("Number of <item> entries found:", items.length);
 
       let headlines = "";
       for (let i = 0; i < Math.min(items.length, 30); i++) {
         const titleNode = items[i].getElementsByTagName("title")[0];
         if (titleNode && titleNode.textContent) {
           const title = titleNode.textContent;
-          headlines += `<span class="headline">📰 ${title}</span>`;
+          headlines += `<span class="headline">${title}</span>`;
         }
       }
 
