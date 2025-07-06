@@ -6,7 +6,7 @@
   <meta http-equiv="refresh" content="3600" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" href="data:,">
-  <title>CNN News Ticker</title>
+  <title>BBC News Ticker</title>
   <style>
     body {
       margin: 0;
@@ -49,22 +49,10 @@
   <div id="ticker-container">
     <div id="ticker">Loading headlines...</div>
   </div>
-<rss-ticker
-  autostart="2"
-  url="https://rss.cnn.com/rss/edition.rss"
-  proxy-url="https://corsproxy.io/%%_URL_%%"
-  speed="2"
-  color-new="#a44"
-  color-old="#bbb"
-  hrs-old="6"
-  transparency="0.3"
-  infobox-link-bgcolor="#1a1a1a"
-  font-size="1.3">
-</rss-ticker>
 
 <script>
   async function loadHeadlines() {
-    const rssFeed = "https://rss.cnn.com/rss/edition.rss";
+    const rssFeed = "https://feeds.bbci.co.uk/news/rss.xml";
     const proxyUrl = "https://api.allorigins.win/get?url=" + encodeURIComponent(rssFeed);
 
     try {
