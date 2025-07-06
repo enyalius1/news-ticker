@@ -53,7 +53,7 @@
 <script>
   async function loadHeadlines() {
     const rssFeed = "https://rss.cnn.com/rss/edition.rss";
-    const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(rssFeed);
+    const proxyUrl = "https://api.allorigins.win/get?url=" + encodeURIComponent(rssFeed);
 
     try {
       const response = await fetch(proxyUrl);
