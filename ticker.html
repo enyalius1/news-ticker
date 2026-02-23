@@ -22,13 +22,13 @@
       white-space: nowrap;
       overflow: hidden;
       box-sizing: border-box;
-      padding: 10px;
+      padding: 10px 12px;
     }
 
     #ticker {
       display: inline-block;
       padding-left: 100%;
-      animation: scroll-left 200s linear infinite;
+      animation: scroll-left 220s linear infinite;
       will-change: transform;
     }
 
@@ -37,9 +37,10 @@
       to   { transform: translateX(-100%); }
     }
 
-    .headline {
-      margin-right: 50px;
-    }
+    .item { display: inline; }
+    .title { font-weight: 700; }
+    .desc { font-weight: 400; opacity: 0.9; margin-left: 10px; }
+    .sep  { display: inline-block; margin: 0 18px; opacity: 0.9; font-weight: 700; }
   </style>
 </head>
 
@@ -49,45 +50,53 @@
   </div>
 
   <script>
-    // 1) Your RSS source and your Worker proxy (THIS is what fixes the CORS/proxy reliability issue)
-    const rssFeed = "https://feeds.bbci.co.uk/news/rss.xml";
-    const workerBase = "https://bbc-rss-proxy.hitrmiss2023.workers.dev";
-    const proxyUrl = workerBase + "/rss?url=" + encodeURIComponent(rssFeed);
+    // Your RSS feed + your Worker
+    var rssFeed = "https://feeds.bbci.co.uk/news/rss.xml";
+    var workerBase = "https://bbc-rss-proxy.hitrmiss2023.workers.dev";
+    var proxyUrl = workerBase + "/rss?url=" + encodeURIComponent(rssFeed);
 
-    const tickerEl = document.getElementById("ticker");
-
-    // Keep the last good headlines so a single hiccup doesn't blank the overlay
-    let lastGoodHTML = tickerEl.innerHTML;
-    let inFlight = false;
+    var tickerEl = document.getElementById("ticker");
+    var lastGoodHTML = tickerEl.innerHTML;
+    var inFlight = false;
 
     function escapeHTML(str) {
-      return str.replace(/[&<>"']/g, (m) => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;"
-      }[m]));
+      return String(str).replace(/[&<>"']/g, function (m) {
+        return ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;"
+        })[m];
+      });
     }
 
-    async function fetchWithTimeout(url, ms = 12000) {
-      const controller = new AbortController();
-      const t = setTimeout(() => controller.abort(), ms);
-      try {
-        // cache: "no-store" ensures the browser doesn't cache weirdly;
-        // Cloudflare caching is what we want.
-        return await fetch(url, { signal: controller.signal, cache: "no-store" });
-      } finally {
-        clearTimeout(t);
-      }
+    function stripTags(str) {
+      return String(str).replace(/<[^>]*>/g, "");
     }
 
     function restartAnimation() {
-      // When content changes, restart the CSS animation so it doesn't get "stuck"
       tickerEl.style.animation = "none";
       // force reflow
-      void tickerEl.offsetWidth;
+      tickerEl.offsetWidth;
       tickerEl.style.animation = "";
+    }
+
+    // Timeout wrapper without AbortController (more OBS-compatible)
+    function fetchWithTimeout(url, ms) {
+      ms = ms || 12000;
+      return Promise.race([
+        fetch(url, { cache: "no-store" }),
+        new Promise(function (_, reject) {
+          setTimeout(function () { reject(new Error("Fetch timeout after " + ms + "ms")); }, ms);
+        })
+      ]);
+    }
+
+    function getText(nodeList, tagName) {
+      var n = nodeList.getElementsByTagName(tagName);
+      if (!n || !n[0] || !n[0].textContent) return "";
+      return n[0].textContent.trim();
     }
 
     async function loadHeadlines() {
@@ -95,52 +104,71 @@
       inFlight = true;
 
       try {
-        const response = await fetchWithTimeout(proxyUrl, 12000);
-        if (!response.ok) throw new Error("HTTP " + response.status);
+        console.log("[ticker] Fetching:", proxyUrl);
 
-        const contents = await response.text();
+        var response = await fetchWithTimeout(proxyUrl, 12000);
+        console.log("[ticker] HTTP status:", response.status);
 
-        const parser = new DOMParser();
-        const xml = parser.parseFromString(contents, "application/xml");
-
-        // If something returned non-XML, DOMParser gives a parsererror node
-        if (xml.getElementsByTagName("parsererror").length) {
-          throw new Error("XML parse error");
+        if (!response.ok) {
+          throw new Error("HTTP " + response.status);
         }
 
-        const items = xml.getElementsByTagName("item");
+        var contents = await response.text();
+        console.log("[ticker] First 200 chars:", contents.slice(0, 200));
 
-        let headlines = "";
-        const count = Math.min(items.length, 30);
+        var parser = new DOMParser();
+        var xml = parser.parseFromString(contents, "application/xml");
 
-        for (let i = 0; i < count; i++) {
-          const titleNode = items[i].getElementsByTagName("title")[0];
-          const title = titleNode && titleNode.textContent ? titleNode.textContent.trim() : "";
-          if (title) headlines += `<span class="headline">${escapeHTML(title)}</span>`;
+        // Detect XML parse errors
+        var parseErrors = xml.getElementsByTagName("parsererror");
+        if (parseErrors && parseErrors.length) {
+          throw new Error("XML parse error (parsererror present)");
         }
 
-        if (!headlines) throw new Error("No headlines found");
+        var items = xml.getElementsByTagName("item");
+        var maxItems = Math.min(items.length, 20);
 
-        // Update display
-        tickerEl.innerHTML = headlines;
-        lastGoodHTML = headlines;
+        var html = "";
+        for (var i = 0; i < maxItems; i++) {
+          var title = getText(items[i], "title");
+          var desc = getText(items[i], "description");
 
-        // Make sure the scroll restarts cleanly after updates
+          desc = stripTags(desc);
+          if (desc.length > 140) desc = desc.slice(0, 137).replace(/\s+$/, "") + "…";
+
+          if (!title && !desc) continue;
+
+          if (html) html += '<span class="sep">• |</span>';
+
+          html += '<span class="item">' +
+                    '<span class="title">' + escapeHTML(title) + '</span>' +
+                    (desc ? '<span class="desc">— ' + escapeHTML(desc) + '</span>' : '') +
+                  '</span>';
+        }
+
+        if (!html) throw new Error("No items parsed (empty HTML)");
+
+        tickerEl.innerHTML = html;
+        lastGoodHTML = html;
         restartAnimation();
+
       } catch (e) {
-        console.error("Failed to load headlines:", e);
-        // keep the last good display (no ugly "Failed..." message)
+        console.error("[ticker] Failed to load headlines:", e);
+
+        // Keep last good content (don’t blank the overlay)
         tickerEl.innerHTML = lastGoodHTML;
+
+        // If we never succeeded, show a clearer message:
+        if (lastGoodHTML === "Loading headlines...") {
+          tickerEl.textContent = "Waiting for feed… (check console)";
+        }
       } finally {
         inFlight = false;
       }
     }
 
-    // Initial load
     loadHeadlines();
-
-    // Match your Cloudflare cache TTL (if Worker caches 10 min, refresh 10 min)
-    setInterval(loadHeadlines, 10 * 60 * 1000);
+    setInterval(loadHeadlines, 10 * 60 * 1000); // match Worker cache (10 min)
   </script>
 </body>
 </html>
