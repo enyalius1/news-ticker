@@ -3,15 +3,15 @@
 <head>
   <meta name="robots" content="noindex, nofollow" />
   <meta charset="UTF-8" />
-  <meta http-equiv="refresh" content="1800" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" href="data:,">
   <title>BBC News Ticker</title>
+
   <style>
     body {
       margin: 0;
       overflow: hidden;
-      background-color: black;
+      background-color: rgba(0, 0, 0, 0); /* transparent for OBS */
       color: white;
       font-family: Arial, sans-serif;
       font-size: 20px;
@@ -29,15 +29,12 @@
       display: inline-block;
       padding-left: 100%;
       animation: scroll-left 200s linear infinite;
+      will-change: transform;
     }
 
     @keyframes scroll-left {
-      from {
-        transform: translateX(0%);
-      }
-      to {
-        transform: translateX(-100%);
-      }
+      from { transform: translateX(0%); }
+      to   { transform: translateX(-100%); }
     }
 
     .headline {
@@ -45,45 +42,105 @@
     }
   </style>
 </head>
+
 <body>
   <div id="ticker-container">
     <div id="ticker">Loading headlines...</div>
   </div>
 
-<script>
-  async function loadHeadlines() {
+  <script>
+    // 1) Your RSS source and your Worker proxy (THIS is what fixes the CORS/proxy reliability issue)
     const rssFeed = "https://feeds.bbci.co.uk/news/rss.xml";
-    const proxyUrl = "https://api.allorigins.win/get?url=" + encodeURIComponent(rssFeed);
+    const workerBase = "https://bbc-rss-proxy.hitrmiss2023.workers.dev";
+    const proxyUrl = workerBase + "/rss?url=" + encodeURIComponent(rssFeed);
 
-    try {
-      const response = await fetch(proxyUrl);
-      if (!response.ok) throw new Error("Network response not OK");
+    const tickerEl = document.getElementById("ticker");
 
-      const { contents } = await response.json();
-      const parser = new DOMParser();
-      const xml = parser.parseFromString(contents, "application/xml");
+    // Keep the last good headlines so a single hiccup doesn't blank the overlay
+    let lastGoodHTML = tickerEl.innerHTML;
+    let inFlight = false;
 
-      const items = xml.getElementsByTagName("item");
-      console.log("Number of <item> entries found:", items.length);
-
-      let headlines = "";
-      for (let i = 0; i < Math.min(items.length, 30); i++) {
-        const titleNode = items[i].getElementsByTagName("title")[0];
-        if (titleNode && titleNode.textContent) {
-          const title = titleNode.textContent;
-          headlines += `<span class="headline">${title}</span>`;
-        }
-      }
-
-      document.getElementById("ticker").innerHTML = headlines || "Still no headlines found.";
-    } catch (e) {
-      console.error("Failed to load headlines:", e);
-      document.getElementById("ticker").textContent = "Failed to load headlines.";
+    function escapeHTML(str) {
+      return str.replace(/[&<>"']/g, (m) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[m]));
     }
-  }
 
-  loadHeadlines();
-  setInterval(loadHeadlines, 5 * 60 * 1000);
-</script>
+    async function fetchWithTimeout(url, ms = 12000) {
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), ms);
+      try {
+        // cache: "no-store" ensures the browser doesn't cache weirdly;
+        // Cloudflare caching is what we want.
+        return await fetch(url, { signal: controller.signal, cache: "no-store" });
+      } finally {
+        clearTimeout(t);
+      }
+    }
+
+    function restartAnimation() {
+      // When content changes, restart the CSS animation so it doesn't get "stuck"
+      tickerEl.style.animation = "none";
+      // force reflow
+      void tickerEl.offsetWidth;
+      tickerEl.style.animation = "";
+    }
+
+    async function loadHeadlines() {
+      if (inFlight) return;
+      inFlight = true;
+
+      try {
+        const response = await fetchWithTimeout(proxyUrl, 12000);
+        if (!response.ok) throw new Error("HTTP " + response.status);
+
+        const contents = await response.text();
+
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(contents, "application/xml");
+
+        // If something returned non-XML, DOMParser gives a parsererror node
+        if (xml.getElementsByTagName("parsererror").length) {
+          throw new Error("XML parse error");
+        }
+
+        const items = xml.getElementsByTagName("item");
+
+        let headlines = "";
+        const count = Math.min(items.length, 30);
+
+        for (let i = 0; i < count; i++) {
+          const titleNode = items[i].getElementsByTagName("title")[0];
+          const title = titleNode && titleNode.textContent ? titleNode.textContent.trim() : "";
+          if (title) headlines += `<span class="headline">${escapeHTML(title)}</span>`;
+        }
+
+        if (!headlines) throw new Error("No headlines found");
+
+        // Update display
+        tickerEl.innerHTML = headlines;
+        lastGoodHTML = headlines;
+
+        // Make sure the scroll restarts cleanly after updates
+        restartAnimation();
+      } catch (e) {
+        console.error("Failed to load headlines:", e);
+        // keep the last good display (no ugly "Failed..." message)
+        tickerEl.innerHTML = lastGoodHTML;
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    // Initial load
+    loadHeadlines();
+
+    // Match your Cloudflare cache TTL (if Worker caches 10 min, refresh 10 min)
+    setInterval(loadHeadlines, 10 * 60 * 1000);
+  </script>
 </body>
 </html>
