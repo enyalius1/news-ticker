@@ -8,39 +8,35 @@
   <title>BBC News Ticker</title>
 
   <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      background-color: rgba(0, 0, 0, 0); /* transparent for OBS */
-      color: white;
+    body{
+      margin:0;
+      overflow:hidden;
+      background-color: rgba(0,0,0,0);
+      color:#fff;
       font-family: Arial, sans-serif;
-      font-size: 20px;
+      font-size:20px;
     }
-
-    #ticker-container {
-      width: 100%;
-      white-space: nowrap;
-      overflow: hidden;
-      box-sizing: border-box;
-      padding: 10px 12px;
+    #ticker-container{
+      width:100%;
+      white-space:nowrap;
+      overflow:hidden;
+      box-sizing:border-box;
+      padding:10px 12px;
     }
-
-    #ticker {
-      display: inline-block;
-      padding-left: 100%;
+    #ticker{
+      display:inline-block;
+      padding-left:100%;
       animation: scroll-left 220s linear infinite;
       will-change: transform;
     }
-
-    @keyframes scroll-left {
-      from { transform: translateX(0%); }
-      to   { transform: translateX(-100%); }
+    @keyframes scroll-left{
+      from{ transform: translateX(0%); }
+      to{ transform: translateX(-100%); }
     }
-
-    .item { display: inline; }
-    .title { font-weight: 700; }
-    .desc { font-weight: 400; opacity: 0.9; margin-left: 10px; }
-    .sep  { display: inline-block; margin: 0 18px; opacity: 0.9; font-weight: 700; }
+    .item{ display:inline; }
+    .title{ font-weight:700; }
+    .desc{ font-weight:400; opacity:0.9; margin-left:10px; }
+    .sep{ display:inline-block; margin:0 18px; opacity:0.9; font-weight:700; }
   </style>
 </head>
 
@@ -50,7 +46,6 @@
   </div>
 
   <script>
-    // Your RSS feed + your Worker
     var rssFeed = "https://feeds.bbci.co.uk/news/rss.xml";
     var workerBase = "https://bbc-rss-proxy.hitrmiss2023.workers.dev";
     var proxyUrl = workerBase + "/rss?url=" + encodeURIComponent(rssFeed);
@@ -61,81 +56,51 @@
 
     function escapeHTML(str) {
       return String(str).replace(/[&<>"']/g, function (m) {
-        return ({
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#39;"
-        })[m];
+        return ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" })[m];
       });
     }
-
-    function stripTags(str) {
-      return String(str).replace(/<[^>]*>/g, "");
-    }
-
-    function restartAnimation() {
+    function stripTags(str){ return String(str).replace(/<[^>]*>/g, ""); }
+    function restartAnimation(){
       tickerEl.style.animation = "none";
-      // force reflow
-      tickerEl.offsetWidth;
+      tickerEl.offsetWidth; // reflow
       tickerEl.style.animation = "";
     }
-
-    // Timeout wrapper without AbortController (more OBS-compatible)
-    function fetchWithTimeout(url, ms) {
+    function fetchWithTimeout(url, ms){
       ms = ms || 12000;
       return Promise.race([
         fetch(url, { cache: "no-store" }),
-        new Promise(function (_, reject) {
-          setTimeout(function () { reject(new Error("Fetch timeout after " + ms + "ms")); }, ms);
+        new Promise(function(_, reject){
+          setTimeout(function(){ reject(new Error("Fetch timeout")); }, ms);
         })
       ]);
     }
-
-    function getText(nodeList, tagName) {
-      var n = nodeList.getElementsByTagName(tagName);
+    function getText(node, tag){
+      var n = node.getElementsByTagName(tag);
       if (!n || !n[0] || !n[0].textContent) return "";
       return n[0].textContent.trim();
     }
 
-    async function loadHeadlines() {
+    async function loadHeadlines(){
       if (inFlight) return;
       inFlight = true;
 
-      try {
-        console.log("[ticker] Fetching:", proxyUrl);
+      try{
+        var resp = await fetchWithTimeout(proxyUrl, 12000);
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
 
-        var response = await fetchWithTimeout(proxyUrl, 12000);
-        console.log("[ticker] HTTP status:", response.status);
-
-        if (!response.ok) {
-          throw new Error("HTTP " + response.status);
-        }
-
-        var contents = await response.text();
-        console.log("[ticker] First 200 chars:", contents.slice(0, 200));
-
-        var parser = new DOMParser();
-        var xml = parser.parseFromString(contents, "application/xml");
-
-        // Detect XML parse errors
-        var parseErrors = xml.getElementsByTagName("parsererror");
-        if (parseErrors && parseErrors.length) {
-          throw new Error("XML parse error (parsererror present)");
-        }
+        var text = await resp.text();
+        var xml = new DOMParser().parseFromString(text, "application/xml");
+        if (xml.getElementsByTagName("parsererror").length) throw new Error("XML parse error");
 
         var items = xml.getElementsByTagName("item");
         var maxItems = Math.min(items.length, 20);
 
         var html = "";
-        for (var i = 0; i < maxItems; i++) {
+        for (var i=0; i<maxItems; i++){
           var title = getText(items[i], "title");
-          var desc = getText(items[i], "description");
+          var desc  = stripTags(getText(items[i], "description"));
 
-          desc = stripTags(desc);
           if (desc.length > 140) desc = desc.slice(0, 137).replace(/\s+$/, "") + "…";
-
           if (!title && !desc) continue;
 
           if (html) html += '<span class="sep">• |</span>';
@@ -146,29 +111,20 @@
                   '</span>';
         }
 
-        if (!html) throw new Error("No items parsed (empty HTML)");
-
+        if (!html) throw new Error("No items parsed");
         tickerEl.innerHTML = html;
         lastGoodHTML = html;
         restartAnimation();
-
-      } catch (e) {
-        console.error("[ticker] Failed to load headlines:", e);
-
-        // Keep last good content (don’t blank the overlay)
+      } catch(e){
+        console.error("Ticker error:", e);
         tickerEl.innerHTML = lastGoodHTML;
-
-        // If we never succeeded, show a clearer message:
-        if (lastGoodHTML === "Loading headlines...") {
-          tickerEl.textContent = "Waiting for feed… (check console)";
-        }
       } finally {
         inFlight = false;
       }
     }
 
     loadHeadlines();
-    setInterval(loadHeadlines, 10 * 60 * 1000); // match Worker cache (10 min)
+    setInterval(loadHeadlines, 10 * 60 * 1000);
   </script>
 </body>
 </html>
