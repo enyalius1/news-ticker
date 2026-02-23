@@ -1,130 +1,96 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta name="robots" content="noindex, nofollow" />
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="icon" href="data:,">
-  <title>BBC News Ticker</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <meta charset="UTF-8" />
+    <meta http-equiv="refresh" content="1800" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:,">
+    <title>BBC News Ticker</title>
 
-  <style>
-    body{
-      margin:0;
-      overflow:hidden;
-      background-color: rgba(0,0,0,0);
-      color:#fff;
-      font-family: Arial, sans-serif;
-      font-size:20px;
-    }
-    #ticker-container{
-      width:100%;
-      white-space:nowrap;
-      overflow:hidden;
-      box-sizing:border-box;
-      padding:10px 12px;
-    }
-    #ticker{
-      display:inline-block;
-      padding-left:100%;
-      animation: scroll-left 220s linear infinite;
-      will-change: transform;
-    }
-    @keyframes scroll-left{
-      from{ transform: translateX(0%); }
-      to{ transform: translateX(-100%); }
-    }
-    .item{ display:inline; }
-    .title{ font-weight:700; }
-    .desc{ font-weight:400; opacity:0.9; margin-left:10px; }
-    .sep{ display:inline-block; margin:0 18px; opacity:0.9; font-weight:700; }
-  </style>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: black;
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 20px;
+        }
+
+        #ticker-container {
+            width: 100%;
+            white-space: nowrap;
+            overflow: hidden;
+            box-sizing: border-box;
+            padding: 10px;
+        }
+
+        #ticker {
+            display: inline-block;
+            padding-left: 100%;
+            animation: scroll-left 200s linear infinite;
+        }
+
+        @keyframes scroll-left {
+            from {
+                transform: translateX(0%);
+            }
+            to {
+                transform: translateX(-100%);
+            }
+        }
+
+        .headline {
+            margin-right: 50px;
+        }
+    </style>
 </head>
 
 <body>
-  <div id="ticker-container">
-    <div id="ticker">Loading headlines...</div>
-  </div>
+    <div id="ticker-container">
+        <div id="ticker">Loading headlines...</div>
+    </div>
 
-  <script>
-    var rssFeed = "https://feeds.bbci.co.uk/news/rss.xml";
-    var workerBase = "https://bbc-rss-proxy.hitrmiss2023.workers.dev";
-    var proxyUrl = workerBase + "/rss?url=" + encodeURIComponent(rssFeed);
+    <script>
+        async function loadHeadlines() {
+            const rssFeed = "https://feeds.bbci.co.uk/news/rss.xml";
+            const proxyUrl = "https://api.allorigins.win/get?url=" + encodeURIComponent(rssFeed);
 
-    var tickerEl = document.getElementById("ticker");
-    var lastGoodHTML = tickerEl.innerHTML;
-    var inFlight = false;
+            try {
+                const response = await fetch(proxyUrl);
+                if (!response.ok) throw new Error("Network response not OK");
 
-    function escapeHTML(str) {
-      return String(str).replace(/[&<>"']/g, function (m) {
-        return ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" })[m];
-      });
-    }
-    function stripTags(str){ return String(str).replace(/<[^>]*>/g, ""); }
-    function restartAnimation(){
-      tickerEl.style.animation = "none";
-      tickerEl.offsetWidth; // reflow
-      tickerEl.style.animation = "";
-    }
-    function fetchWithTimeout(url, ms){
-      ms = ms || 12000;
-      return Promise.race([
-        fetch(url, { cache: "no-store" }),
-        new Promise(function(_, reject){
-          setTimeout(function(){ reject(new Error("Fetch timeout")); }, ms);
-        })
-      ]);
-    }
-    function getText(node, tag){
-      var n = node.getElementsByTagName(tag);
-      if (!n || !n[0] || !n[0].textContent) return "";
-      return n[0].textContent.trim();
-    }
+                const { contents } = await response.json();
+                const parser = new DOMParser();
+                const xml = parser.parseFromString(contents, "application/xml");
+                const items = xml.getElementsByTagName("item");
 
-    async function loadHeadlines(){
-      if (inFlight) return;
-      inFlight = true;
+                console.log("Number of <item> entries found:", items.length);
 
-      try{
-        var resp = await fetchWithTimeout(proxyUrl, 12000);
-        if (!resp.ok) throw new Error("HTTP " + resp.status);
+                let headlines = "";
 
-        var text = await resp.text();
-        var xml = new DOMParser().parseFromString(text, "application/xml");
-        if (xml.getElementsByTagName("parsererror").length) throw new Error("XML parse error");
+                for (let i = 0; i < Math.min(items.length, 30); i++) {
+                    const titleNode = items[i].getElementsByTagName("title")[0];
 
-        var items = xml.getElementsByTagName("item");
-        var maxItems = Math.min(items.length, 20);
+                    if (titleNode && titleNode.textContent) {
+                        const title = titleNode.textContent;
+                        headlines += `<span class="headline">${title}</span>`;
+                    }
+                }
 
-        var html = "";
-        for (var i=0; i<maxItems; i++){
-          var title = getText(items[i], "title");
-          var desc  = stripTags(getText(items[i], "description"));
+                document.getElementById("ticker").innerHTML =
+                    headlines || "Still no headlines found.";
 
-          if (desc.length > 140) desc = desc.slice(0, 137).replace(/\s+$/, "") + "…";
-          if (!title && !desc) continue;
-
-          if (html) html += '<span class="sep">• |</span>';
-
-          html += '<span class="item">' +
-                    '<span class="title">' + escapeHTML(title) + '</span>' +
-                    (desc ? '<span class="desc">— ' + escapeHTML(desc) + '</span>' : '') +
-                  '</span>';
+            } catch (e) {
+                console.error("Failed to load headlines:", e);
+                document.getElementById("ticker").textContent =
+                    "Failed to load headlines.";
+            }
         }
 
-        if (!html) throw new Error("No items parsed");
-        tickerEl.innerHTML = html;
-        lastGoodHTML = html;
-        restartAnimation();
-      } catch(e){
-        console.error("Ticker error:", e);
-        tickerEl.innerHTML = lastGoodHTML;
-      } finally {
-        inFlight = false;
-      }
-    }
-
-    loadHeadlines();
-    setInterval(loadHeadlines, 10 * 60 * 1000);
-  </script>
+        loadHeadlines();
+        setInterval(loadHeadlines, 5 * 60 * 1000);
+    </script>
 </body>
 </html>
