@@ -22,13 +22,13 @@
       white-space: nowrap;
       overflow: hidden;
       box-sizing: border-box;
-      padding: 10px 12px;
+      padding: 10px;
     }
 
     #ticker {
       display: inline-block;
       padding-left: 100%;
-      animation: scroll-left 220s linear infinite;
+      animation: scroll-left 200s linear infinite;
       will-change: transform;
     }
 
@@ -37,27 +37,8 @@
       to   { transform: translateX(-100%); }
     }
 
-    /* Each news item stays inline for a single-line ticker */
-    .item {
-      display: inline;
-      margin-right: 24px;
-    }
-
-    .title {
-      font-weight: 700;
-    }
-
-    .desc {
-      font-weight: 400;
-      opacity: 0.9;
-      margin-left: 10px;
-    }
-
-    .sep {
-      display: inline-block;
-      margin: 0 18px;
-      opacity: 0.9;
-      font-weight: 700;
+    .headline {
+      margin-right: 50px;
     }
   </style>
 </head>
@@ -68,13 +49,14 @@
   </div>
 
   <script>
-    // RSS source and your Worker proxy
+    // 1) Your RSS source and your Worker proxy (THIS is what fixes the CORS/proxy reliability issue)
     const rssFeed = "https://feeds.bbci.co.uk/news/rss.xml";
     const workerBase = "https://bbc-rss-proxy.hitrmiss2023.workers.dev";
     const proxyUrl = workerBase + "/rss?url=" + encodeURIComponent(rssFeed);
 
     const tickerEl = document.getElementById("ticker");
 
+    // Keep the last good headlines so a single hiccup doesn't blank the overlay
     let lastGoodHTML = tickerEl.innerHTML;
     let inFlight = false;
 
@@ -88,16 +70,12 @@
       }[m]));
     }
 
-    // BBC descriptions sometimes contain HTML entities; this keeps it readable.
-    // We strip any HTML tags if they appear.
-    function stripTags(str) {
-      return str.replace(/<[^>]*>/g, "");
-    }
-
     async function fetchWithTimeout(url, ms = 12000) {
       const controller = new AbortController();
       const t = setTimeout(() => controller.abort(), ms);
       try {
+        // cache: "no-store" ensures the browser doesn't cache weirdly;
+        // Cloudflare caching is what we want.
         return await fetch(url, { signal: controller.signal, cache: "no-store" });
       } finally {
         clearTimeout(t);
@@ -105,8 +83,10 @@
     }
 
     function restartAnimation() {
+      // When content changes, restart the CSS animation so it doesn't get "stuck"
       tickerEl.style.animation = "none";
-      void tickerEl.offsetWidth; // force reflow
+      // force reflow
+      void tickerEl.offsetWidth;
       tickerEl.style.animation = "";
     }
 
@@ -122,51 +102,45 @@
 
         const parser = new DOMParser();
         const xml = parser.parseFromString(contents, "application/xml");
+
+        // If something returned non-XML, DOMParser gives a parsererror node
         if (xml.getElementsByTagName("parsererror").length) {
           throw new Error("XML parse error");
         }
 
         const items = xml.getElementsByTagName("item");
-        const maxItems = Math.min(items.length, 20);
 
-        let html = "";
-        for (let i = 0; i < maxItems; i++) {
+        let headlines = "";
+        const count = Math.min(items.length, 30);
+
+        for (let i = 0; i < count; i++) {
           const titleNode = items[i].getElementsByTagName("title")[0];
-          const descNode  = items[i].getElementsByTagName("description")[0];
-
-          const title = titleNode?.textContent?.trim() || "";
-          let desc = descNode?.textContent?.trim() || "";
-
-          // Clean up description (BBC usually is plain text, but be safe)
-          desc = stripTags(desc);
-          // Optional: shorten long descriptions for readability in a ticker
-          if (desc.length > 140) desc = desc.slice(0, 137).trimEnd() + "…";
-
-          if (!title && !desc) continue;
-
-          if (html) html += `<span class="sep">• |</span>`;
-
-          html += `<span class="item"><span class="title">${escapeHTML(title)}</span>` +
-                  (desc ? `<span class="desc">— ${escapeHTML(desc)}</span>` : ``) +
-                  `</span>`;
+          const title = titleNode && titleNode.textContent ? titleNode.textContent.trim() : "";
+          if (title) headlines += `<span class="headline">${escapeHTML(title)}</span>`;
         }
 
-        if (!html) throw new Error("No items parsed");
+        if (!headlines) throw new Error("No headlines found");
 
-        tickerEl.innerHTML = html;
-        lastGoodHTML = html;
+        // Update display
+        tickerEl.innerHTML = headlines;
+        lastGoodHTML = headlines;
+
+        // Make sure the scroll restarts cleanly after updates
         restartAnimation();
-
       } catch (e) {
         console.error("Failed to load headlines:", e);
+        // keep the last good display (no ugly "Failed..." message)
         tickerEl.innerHTML = lastGoodHTML;
       } finally {
         inFlight = false;
       }
     }
 
+    // Initial load
     loadHeadlines();
-    setInterval(loadHeadlines, 10 * 60 * 1000); // match your Worker cache TTL (10 min)
+
+    // Match your Cloudflare cache TTL (if Worker caches 10 min, refresh 10 min)
+    setInterval(loadHeadlines, 10 * 60 * 1000);
   </script>
 </body>
 </html>
